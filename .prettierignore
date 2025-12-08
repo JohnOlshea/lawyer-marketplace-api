@@ -1,0 +1,50 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build
+dist
+build
+
+# Logs
+logs
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# Drizzle
+src/infrastructure/database/drizzle/migrations
+
+# Environment
+.env
+.env.*
+
+# OS
+.DS_Store
+
+# IDE
+.vscode
+.idea
+
+# Coverage
+coverage
+
+# Cache
+.cache
+.eslintcache
+
+# Temp
+tmp
+temp
+
+# Bun
+.bun
+bun.lockb
+
+# Package manager lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
