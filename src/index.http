@@ -1,0 +1,32 @@
+GET http://localhost:3000/api/v1/clients
+
+###
+GET http://localhost:3000/api/v1/clients/b63ee9dd-7f7b-4c6b-8f5c-b6a2eeb1f851
+
+###
+
+POST http://localhost:3000/api/auth/sign-up/email
+Content-Type: application/json
+Origin: http://localhost:3000
+
+{
+  "email": "johnolshea@gmail.com",
+  "name": "John",
+  "phoneNumber": "1234",
+  "password": "password123"
+}
+
+###
+
+POST http://localhost:3000/api/auth/sign-in/email
+Content-Type: application/json
+Origin: http://localhost:3000
+
+{
+  "email": "johnolshea@gmail.com",
+  "password": "password123"
+}
+
+###
+
+GET http://localhost:3000/api/protected
