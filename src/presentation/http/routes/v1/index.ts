@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 
+import { createAuthRoutes } from './auth.routes';
 import { createClientRoutes } from './client.routes';
 
 /**
@@ -17,6 +18,7 @@ export function createV1Routes() {
   const v1 = new Hono();
 
   // Mount route modules
+  v1.route('/', createAuthRoutes());
   v1.route('/clients', createClientRoutes());
   
   // TODO: Add more route modules as they're implemented
