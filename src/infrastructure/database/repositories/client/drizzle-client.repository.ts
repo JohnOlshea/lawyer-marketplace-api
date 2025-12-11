@@ -1,8 +1,8 @@
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
-import { client } from '../../schema';
 import { db } from '@/infrastructure/database/db';
 import { ClientMapper } from '../../mappers/client.mapper';
+import { clients, clientSpecializations, user } from '../../schema';
 import type { Client } from '@/domain/client/entities/client.entity';
 import type { IClientRepository } from '@/domain/client/repositories/client.repository.interface';
 
@@ -10,17 +10,28 @@ import type { IClientRepository } from '@/domain/client/repositories/client.repo
  * Drizzle Client Repository Implementation
  * 
  * Concrete implementation of IClientRepository using Drizzle ORM.
+ * Handles data persistence and retrieval for Client aggregates.
  * 
  * @remarks
  * - Infrastructure layer: handles data access details
- * - Implements domain repository interface (Dependency Inversion)
+ * - Implements domain repository interface (Dependency Inversion Principle)
  * - Uses ClientMapper to convert between DB rows and domain entities
  * - Database-agnostic from domain's perspective
  * 
- * TODO: Add save() method implementation
- * TODO: Add transaction support
- * TODO: Add error handling and logging
- * TODO: Consider adding caching layer
+ * @example
+ * ```typescript
+ * const repository = new DrizzleClientRepository();
+ * const client = await repository.findById('client-uuid');
+ * if (client) {
+ *   client.completeOnboarding();
+ *   await repository.save(client);
+ * }
+ * ```
+ * 
+ * TODO: Inject database instance through constructor for better testability
+ * TODO: Add caching layer for frequently accessed clients
+ * TODO: Add comprehensive error handling with custom exceptions
+ * TODO: Add query performance monitoring/logging
  */
 export class DrizzleClientRepository implements IClientRepository {
   /**
@@ -28,80 +39,135 @@ export class DrizzleClientRepository implements IClientRepository {
    * 
    * @param id - Client UUID
    * @returns Client entity or null if not found
-   * 
-   * @remarks
-   * Uses .limit(1) for query optimization since ID is unique
    */
   async findById(id: string): Promise<Client | null> {
     const result = await db
       .select()
-      .from(client)
-      .where(eq(client.id, id))
+      .from(clients)
+      .where(eq(clients.id, id))
       .limit(1);
 
     return result[0] ? ClientMapper.toDomain(result[0]) : null;
   }
 
   /**
-   * Finds a client by their email address
+   * Finds a client by their associated user ID
    * 
-   * @param email - Client email
-   * @returns Client entity or null if not found
+   * @param userId - User UUID from auth system
+   * @returns Client domain entity or null if not found
    * 
    * @remarks
-   * Email should be unique (enforced by DB constraint)
-   * Used for duplicate detection during registration
+   * Eagerly loads related entities (user, specializations) to prevent N+1 queries.
    */
-  async findByEmail(email: string): Promise<Client | null> {
-    const result = await db
-      .select()
-      .from(client)
-      .where(and(eq(client.email, email)))
-      .limit(1);
+  async findByUserId(userId: string): Promise<Client | null> {
+    const result = await db.query.clients.findFirst({
+      where: eq(clients.userId, userId),
+      with: {
+        user: true,
+        specializations: {
+          with: {
+            specialization: true,
+          },
+        },
+      },
+    });
 
-    return result[0] ? ClientMapper.toDomain(result[0]) : null;
+    if (!result) {
+      return null;
+    }
+
+    return ClientMapper.toDomain(result);
   }
 
   /**
-   * Retrieves all clients
+   * Retrieves all clients with their related data
    * 
-   * @returns Array of all client entities
+   * @returns Array of all client domain entities
    * 
    * @remarks
-   * TODO: Add pagination to prevent memory issues with large datasets
-   * TODO: Add optional filtering/sorting parameters
+   * Eagerly loads relations to prevent N+1 queries.
+   * 
+   * WARNING: This loads ALL clients into memory.
+   * TODO: Add pagination support for production use:
+   * TODO: Add optional filtering (by country, specialization, etc.)
+   * TODO: Add sorting options (createdAt, name, etc.)
    */
   async findAll(): Promise<Client[]> {
-    const results = await db.select().from(client);
+    const results = await db.query.clients.findMany({
+      with: {
+        user: true,
+        specializations: {
+          with: {
+            specialization: true,
+          },
+        },
+      },
+    });
 
-    return results.map(ClientMapper.toDomain);
+    return results.map((result) => ClientMapper.toDomain(result));
   }
 
   /**
-   * Checks if a client with given email exists
+   * Persists a client aggregate to the database
    * 
-   * @param email - Email to check
-   * @returns true if exists, false otherwise
+   * @param client - Client domain entity to save
+   * @returns The saved client entity
    * 
-   * TODO: Implement for better performance than findByEmail
-   * This should use SELECT EXISTS for optimal performance
+   * @remarks
+   * Performs a multi-step transactional save:
+   * 1. Inserts/updates client record
+   * 2. Manages client-specialization many-to-many relationships
+   * 3. Updates user onboarding status if applicable
+   * 
+   * The entire operation is atomic - either all steps succeed or all are rolled back.
+   * 
+   * @throws {Error} If transaction fails (TODO: Wrap in RepositoryException)
+   * 
+   * TODO: Handle update case (currently only handles insert)
+   * TODO: Publish domain events after successful transaction
+   * TODO: Consider event sourcing for audit trail
    */
-  async existsByEmail(email: string): Promise<boolean> {
-    const result = await this.findByEmail(email);
-    return result !== null;
-  }
+  async save(client: Client): Promise<Client> {
+    return await db.transaction(async (tx) => {
+      // Step 1: Insert client record
+      const [insertedClient] = await tx
+        .insert(clients)
+        .values({
+          id: client.id,
+          userId: client.userId,
+          phoneNumber: client.phoneNumber,
+          country: client.location.country,
+          state: client.location.state,
+          company: client.company,
+          createdAt: client.createdAt,
+          updatedAt: client.updatedAt,
+        })
+        .returning();
 
-  /**
-   * Saves a client (insert or update)
-   * 
-   * @param client - Client entity to persist
-   * 
-   * TODO: Implement for CreateClientUseCase
-   * TODO: Add transaction support
-   * TODO: Publish domain events after successful save
-   */
-  async save(client: Client): Promise<void> {
-    // TODO: Implement
-    throw new Error('Method not implemented');
+      // Step 2: Insert client specializations only if there are specializations
+      if (client.specializationIds.length > 0) {
+        await tx.insert(clientSpecializations).values(
+          client.specializationIds.map((specializationId) => ({
+            clientId: client.id,
+            specializationId,
+          }))
+        );
+      }
+
+      // Step 3: Update user onboarding_completed flag if onboarding is complete
+      // Synchronizes onboarding status with user record
+      if (client.onboardingCompleted) {
+        await tx
+          .update(user)
+          .set({
+            onboardingCompleted: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(user.id, client.userId));
+      }
+
+      // Return the domain entity, not the DB row
+      return client;
+    });
   }
 }
