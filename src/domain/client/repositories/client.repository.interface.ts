@@ -5,32 +5,19 @@ import type { Client } from '../entities/client.entity';
  * Client Repository Interface
  * 
  * Defines the contract for client persistence operations.
+ * This interface sits in the domain layer, while implementations live in infrastructure.
  * 
  * @remarks
- * - Follows Repository pattern from DDD
  * - Infrastructure layer implements this interface
- * - Domain layer depends on this abstraction (Dependency Inversion)
- * - Keeps domain logic independent of data access details
- * 
- * @example
- * ```typescript
- * class DrizzleClientRepository implements IClientRepository {
- *   async findByEmail(email: string): Promise<Client | null> {
- *     // Implementation details...
- *   }
- * }
- * ```
+ * - Domain depends on abstraction, not concrete implementation (Dependency Inversion)
+ * - Easy to swap implementations (Drizzle → Prisma → TypeORM)
  */
 export interface IClientRepository extends IRepository<Client> {
   /**
-   * Finds a client by their email address
+   * Finds a client by their associated user ID
    * 
-   * @param email - Email address to search for
-   * @returns Client if found, null otherwise
-   * 
-   * @remarks
-   * Email should be unique in the system (business rule)
-   * Used for duplicate detection during registration
+   * @param userId - UUID of the authenticated user from Better Auth
+   * @returns Client aggregate or null if not found
    */
-  findByEmail(email: string): Promise<Client | null>;
+  findByUserId(userId: string): Promise<Client | null>;
 }

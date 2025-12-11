@@ -1,35 +1,27 @@
+import { ValidationException } from '@/domain/shared/errors/validation.exception';
 import { ValueObject } from '../../shared/value-object';
 
-/**
- * Location Value Object Properties
- */
 interface LocationProps {
-  address: string;
-  city: string;
   state: string;
   country: string;
-  postalCode?: string;
 }
 
 /**
  * Location Value Object
  * 
- * Represents a physical address in the system.
+ * Represents a physical address location in the system.
+ * Encapsulates state and country information with validation.
  * 
  * @remarks
- * - Immutable once created
- * - Self-validating
- * - Can be compared for equality
- * - Useful for client addresses, lawyer office locations, etc.
+ * Design Characteristics:
+ * - Immutable: Cannot be changed after creation
+ * - Self-validating: Validates on construction
  * 
  * @example
  * ```typescript
  * const location = Location.create({
- *   address: '123 Main St',
- *   city: 'New York',
- *   state: 'NY',
- *   country: 'USA',
- *   postalCode: '10001'
+ *   state: 'CA',
+ *   country: 'US'
  * });
  * ```
  */
@@ -43,78 +35,56 @@ export class Location extends ValueObject<LocationProps> {
    * 
    * @param props - Location properties
    * @returns Valid Location instance
-   * @throws {Error} If validation fails (TODO: Replace with DomainException)
+   * @throws {ValidationException} If validation fails
+   * 
+   * @remarks
+   * Trims whitespace
    */
   public static create(props: LocationProps): Location {
     this.validateProps(props);
 
-    // Normalize data
     const normalizedProps: LocationProps = {
-      address: props.address.trim(),
-      city: props.city.trim(),
-      state: props.state.trim().toUpperCase(), // Standard: state codes in uppercase
-      country: props.country.trim().toUpperCase(), // ISO country codes
-      postalCode: props.postalCode?.trim(),
+      state: props.state.trim(),
+      country: props.country.trim(),
     };
 
     return new Location(normalizedProps);
   }
 
   /**
-   * Validates location properties
-   * @throws {Error} If validation fails
+   * Validates location properties against business rules
+   * 
+   * @param props - Properties to validate
+   * @throws {ValidationException} If validation fails
    */
   private static validateProps(props: LocationProps): void {
-    const errors: string[] = [];
-
-    if (!props.address || props.address.trim().length === 0) {
-      errors.push('Address is required');
-    }
-
-    if (!props.city || props.city.trim().length === 0) {
-      errors.push('City is required');
+    if (!props.country || props.country.trim().length === 0) {
+      throw new ValidationException('Country is required');
     }
 
     if (!props.state || props.state.trim().length === 0) {
-      errors.push('State is required');
-    }
-
-    if (!props.country || props.country.trim().length === 0) {
-      errors.push('Country is required');
-    }
-
-    // Optional: Validate postal code format based on country
-    if (props.postalCode && props.postalCode.trim().length === 0) {
-      errors.push('Postal code cannot be empty if provided');
-    }
-
-    if (errors.length > 0) {
-      throw new Error(`Location validation failed: ${errors.join(', ')}`);
+      throw new ValidationException('State is required');
     }
   }
 
   // ===================================
-  // Getters
+  // Getters (Value Object Public API)
   // ===================================
 
-  get address(): string {
-    return this._value.address;
-  }
-
-  get city(): string {
-    return this._value.city;
-  }
-
+  /**
+   * Gets the state/province code
+   * @example 'CA', 'NY', 'ON'
+   */
   get state(): string {
     return this._value.state;
   }
 
+  /**
+   * Gets the ISO country code
+   * @example 'US', 'CA', 'GB'
+   */
   get country(): string {
     return this._value.country;
-  }
-
-  get postalCode(): string | undefined {
-    return this._value.postalCode;
   }
 
   // ===================================
@@ -122,32 +92,17 @@ export class Location extends ValueObject<LocationProps> {
   // ===================================
 
   /**
-   * Returns formatted address as a single string
-   * @example "123 Main St, New York, NY 10001, USA"
-   */
-  public getFormattedAddress(): string {
-    const parts = [
-      this.address,
-      this.city,
-      this.postalCode ? `${this.state} ${this.postalCode}` : this.state,
-      this.country,
-    ];
-
-    return parts.filter(Boolean).join(', ');
-  }
-
-  /**
-   * Returns location as JSON object
-   * Useful for API responses and serialization
+   * Serializes location to JSON
+   * 
+   * @returns Plain object representation
+   * 
+   * @remarks
+   * Useful for:
+   * - API responses
+   * - Database persistence
+   * - Logging and debugging
    */
   public toJSON(): LocationProps {
     return { ...this._value };
-  }
-
-  /**
-   * Checks if location is in a specific country
-   */
-  public isInCountry(countryCode: string): boolean {
-    return this.country === countryCode.toUpperCase();
   }
 }

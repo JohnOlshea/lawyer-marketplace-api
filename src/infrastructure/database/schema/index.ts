@@ -1,2 +1,3 @@
-export * from './schema';
-export * from './client';
+export * from './auth.schema';
+export * from './specialization.schema';
+export * from './client.schema';
