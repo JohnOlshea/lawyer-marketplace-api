@@ -10,20 +10,19 @@ import type { Client } from '@/domain/client/entities/client.entity';
  * - Hides internal implementation details from clients
  * 
  * TODO: Consider using class-validator for runtime validation
- * TODO: Add phone number to response when implemented
- * TODO: Consider adding HATEOAS links for REST maturity
  */
 export class ClientResponseDto {
-  /** Unique client identifier (UUID) */
-  id!: string;
-  
-  firstName!: string;
-  lastName!: string;
-  
-  /** Client's full name (computed) */
-  fullName!: string;
-
-  email!: string;
+  id!: string; // Unique client identifier (UUID)
+  userId!: string;
+  name!: string;
+  phoneNumber?: string;
+  location!: {
+    country: string;
+    state: string;
+  };
+  company?: string;
+  specializationIds!: string[];
+  onboardingCompleted!: boolean;
   createdAt!: Date;
   updatedAt!: Date;
 
@@ -40,10 +39,13 @@ export class ClientResponseDto {
   static fromDomain(client: Client): ClientResponseDto {
     return {
       id: client.id,
-      firstName: client.firstName,
-      lastName: client.lastName,
-      fullName: client.fullName,
-      email: client.email,
+      userId: client.userId,
+      name: client.name,
+      phoneNumber: client.phoneNumber,
+      location: client.location,
+      company: client.company,
+      specializationIds: client.specializationIds,
+      onboardingCompleted: client.onboardingCompleted,
       createdAt: client.createdAt,
       updatedAt: client.updatedAt,
     };

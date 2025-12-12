@@ -2,6 +2,8 @@ import type { Context } from 'hono';
 import { auth } from '@/lib/auth';
 import { HttpStatus } from '@/shared/constants/http-status';
 import type { CompleteOnboardingUseCase } from '@/application/client/use-cases/complete-onboarding/complete-onboarding.use-case';
+import { ApiResponse } from '../../dto/client/common/api-response.dto';
+import { OnboardingResponseDto } from '../../dto/client/onboarding-response.dto';
 
 /**
  * Authentication Controller
@@ -11,13 +13,13 @@ import type { CompleteOnboardingUseCase } from '@/application/client/use-cases/c
  * 
  * 
  * @responsibilities
- * - Session validation via Better-Auth
+ * - Session validation via Better-Auth middleware
  * - Request/response transformation (HTTP ↔ DTOs)
  * - Error handling and HTTP status code mapping
  * - Authorization checks
  */
 export class AuthController {
-  constructor(private readonly completeOnboardingUseCase: CompleteOnboardingUseCase) {}
+  constructor(private readonly completeOnboardingUseCase: CompleteOnboardingUseCase) { }
 
   /**
    * Complete client onboarding
@@ -25,10 +27,11 @@ export class AuthController {
    * POST /api/v1/onboarding/complete
    * 
    * @remarks
-   * This endpoint finalizes the client profile creation after initial
-   * authentication.
+   * This endpoint finalizes the client profile creation after initial authentication.
    * 
    * @requires Authentication - Valid Better-Auth session
+   * @requires Email verification - User must have verified email
+   * 
    * @body phoneNumber (optional), country, state, company (optional), specializationIds
    * 
    * @returns 201 - Onboarding completed successfully
@@ -36,38 +39,22 @@ export class AuthController {
    * @returns 401 - No valid session found
    * @returns 409 - Client profile already exists
    * 
-   * @example
-   * ```bash
-   * curl -X POST /api/v1/onboarding/complete \
-   *   -H "Cookie: session=..." \
-   *   -d '{"country":"US","state":"CA","specializationIds":["corp-law"]}'
-   * ```
    */
   async completeOnboarding(c: Context) {
-    try {
-      // Get authenticated user from Better-Auth session
-      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      // Session validated and attached by authentication middleware
+      const session = c.get('session');
 
-      if (!session) {
-        return c.json(
-          {
-            success: false,
-            message: 'Unauthorized',
-            statusCode: HttpStatus.UNAUTHORIZED,
-            timestamp: new Date().toISOString(),
-          },
-          HttpStatus.UNAUTHORIZED
-        );
-      }
-
-      // Extract and validate request body
+      // Extract request body
       const body = await c.req.json();
 
+      const correlationId = c.get('correlationId'); // From middleware
+
       // Execute use case with merged session + body data
+      // Domain exceptions bubble up to global error handler
       const result = await this.completeOnboardingUseCase.execute({
         userId: session.user.id,
-        email: session.user.email,
         name: session.user.name,
+        emailVerified: session.user.emailVerified,
         phoneNumber: body.phoneNumber,
         country: body.country,
         state: body.state,
@@ -75,26 +62,14 @@ export class AuthController {
         specializationIds: body.specializationIds,
       });
 
-      return c.json(
-        {
-          success: true,
-          message: 'Onboarding completed successfully',
-          data: result,
-          statusCode: HttpStatus.CREATED,
-          timestamp: new Date().toISOString(),
-        },
-        HttpStatus.CREATED
+      // Transform domain result to presentation DTO
+      const response = ApiResponse.success(
+        OnboardingResponseDto.fromResult(result),
+        'Onboarding completed successfully',
+        HttpStatus.CREATED,
+        correlationId
       );
-    } catch (error: any) {
-      return c.json(
-        {
-          success: false,
-          message: error.message || 'Failed to complete onboarding',
-          statusCode: HttpStatus.BAD_REQUEST,
-          timestamp: new Date().toISOString(),
-        },
-        HttpStatus.BAD_REQUEST
-      );
-    }
+
+      return c.json(response, HttpStatus.CREATED);
   }
 }

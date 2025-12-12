@@ -1,4 +1,3 @@
-import { Email } from '../value-objects/email.vo';
 import { AggregateRoot } from '../../shared/aggregate-root';
 import { ValidationException } from '@/domain/shared/errors/validation.exception';
 import type { Location } from '../value-objects/location.vo';
@@ -10,7 +9,6 @@ import type { Location } from '../value-objects/location.vo';
  */
 export interface ClientProps {
   userId: string; // Reference to authenticated user in Better Auth
-  email: Email; // Client's email address (validated via Email VO)
   name: string;
   phoneNumber?: string;
   location: Location;
@@ -35,36 +33,10 @@ export interface ClientProps {
  * - Onboarding must be completed before posting requests
  * - Name must be at least 2 characters
  * 
- * **Invariants Maintained:**
- * - Specialization count always between 1-3
- * - Onboarding completed only when all required data exists
- * - Email is always valid (via Email VO)
- * - Location is always valid (via Location VO)
- * 
- * @example
- * ```typescript
- * // Creating a new client
- * const email = Email.create('john@example.com');
- * const location = Location.create({ state: 'CA', country: 'US' });
- * 
- * const client = Client.create(uuid(), {
- *   userId: 'auth-user-id',
- *   email,
- *   name: 'John Doe',
- *   location,
- *   specializationIds: ['family-law', 'estate-planning'],
- *   onboardingCompleted: false
- * });
- * 
- * // Completing onboarding
- * client.completeOnboarding();
- * await clientRepository.save(client);
- * ```
  */
 export class Client extends AggregateRoot {
   // Private state - only accessible through methods and getters
   private _userId: string;
-  private _email: Email;
   private _name: string;
   private _phoneNumber?: string;
   private _location: Location;
@@ -89,7 +61,6 @@ export class Client extends AggregateRoot {
   ) {
     super(id, createdAt, updatedAt);
     this._userId = props.userId;
-    this._email = props.email;
     this._name = props.name;
     this._phoneNumber = props.phoneNumber;
     this._location = props.location;
@@ -158,8 +129,7 @@ export class Client extends AggregateRoot {
    * @throws {ValidationException} If any validation rule fails
    * 
    * @remarks
-   * Email and Location are validated by their respective Value Objects,
-   * so we don't need to validate them here (Single Responsibility).
+   * Location validation is not done here but in value Object (Single Responsibility).
    */
   private static validateProps(props: ClientProps): void {
     if (!props.userId || props.userId.trim().length === 0) {
@@ -201,11 +171,6 @@ export class Client extends AggregateRoot {
   /** Gets the associated user ID from auth system */
   get userId(): string {
     return this._userId;
-  }
-
-  /** Gets the email address as string */
-  get email(): string {
-    return this._email.value;
   }
 
   /** Gets the client's name */
