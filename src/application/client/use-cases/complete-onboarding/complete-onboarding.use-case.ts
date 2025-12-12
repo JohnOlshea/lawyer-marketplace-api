@@ -1,11 +1,10 @@
-import type { IClientRepository } from '../../../../domain/client/repositories/client.repository.interface';
-import { ClientDomainService } from '../../../../domain/client/services/client-domain.service';
-import { Client } from '../../../../domain/client/entities/client.entity';
-import { Email } from '../../../../domain/client/value-objects/email.vo';
-import { Location } from '../../../../domain/client/value-objects/location.vo';
+import { IdGenerator } from '@/shared/utils/id-generator';
+import { Client } from '@/domain/client/entities/client.entity';
+import { Location } from '@/domain/client/value-objects/location.vo';
 import type { CompleteOnboardingDto } from './complete-onboarding.dto';
-import { IdGenerator } from '../../../../shared/utils/id-generator';
-import { ValidationException } from '../../../../domain/shared/errors/validation.exception';
+import { UnauthorizedException } from '@/domain/shared/errors/unauthorized.exception';
+import type { ClientDomainService } from '@/domain/client/services/client-domain.service';
+import type { IClientRepository } from '@/domain/client/repositories/client.repository.interface';
 
 /**
  * Result object returned after successful onboarding completion
@@ -23,26 +22,16 @@ export interface CompleteOnboardingResult {
  * Orchestrates the client profile creation and onboarding completion process.
  * 
  * @responsibilities
- * - Validates specialization selection constraints (1-3 items)
+ * - Validates email verification status before allowing onboarding
  * - Ensures no duplicate client profiles per user
- * - Creates immutable value objects for email and location
+ * - Validates specialization selection constraints (1-3 items)
+ * - Creates immutable value objects for location
  * - Delegates domain validation to ClientDomainService
  * - Persists the client aggregate through the repository
  * 
- * @throws {ValidationException} When specialization count is invalid
+ * @throws {UnauthorizedException} When email is not verified
  * @throws {ClientAlreadyExistsError} When user already has a client profile
- * 
- * @example
- * ```typescript
- * const result = await completeOnboardingUseCase.execute({
- *   userId: 'auth-user-123',
- *   email: 'john@example.com',
- *   name: 'John Doe',
- *   country: 'US',
- *   state: 'CA',
- *   specializationIds: ['corp-law', 'contract-law']
- * });
- * ```
+ * @throws {ValidationException} When specialization IDs are invalid
  */
 export class CompleteOnboardingUseCase {
   constructor(
@@ -51,26 +40,27 @@ export class CompleteOnboardingUseCase {
   ) {}
 
   async execute(dto: CompleteOnboardingDto): Promise<CompleteOnboardingResult> {
-    const { userId, email, name, phoneNumber, country, state, company, specializationIds } = dto;
+    const { userId, name, phoneNumber, country, state, company, specializationIds, emailVerified } = dto;
 
-    // Business rule: Prevent duplicate client profiles for the same user
-    await this.clientDomainService.ensureClientDoesNotExist(userId);
-
-    // Business rule: Validate specializations (1-3 required)
-    if (specializationIds.length === 0 || specializationIds.length > 3) {
-      throw new ValidationException('You must select between 1 and 3 specializations');
+    // Guard: Email must be verified before onboarding
+    if (!emailVerified) {
+      throw new UnauthorizedException('Email verification required. Please verify your email before completing onboarding.');
     }
 
-    // Create immutable value objects with built-in validation
-    const emailVo = Email.create(email);
+    // Step 1: Business rule: Prevent duplicate client profiles for the same user
+    await this.clientDomainService.ensureClientDoesNotExist(userId);
+
+    // Step 2: Validate that specialization IDs exist in database
+    await this.clientDomainService.validateSpecializations(specializationIds);
+
+    // Step 3: Create immutable value objects with built-in validation
     const locationVo = Location.create({country, state});
 
-    // Create client aggregate with initial state
+    // Step 4: Create client aggregate with initial state
     const client = Client.create(
       IdGenerator.generate(),
       {
         userId,
-        email: emailVo,
         name,
         phoneNumber,
         location: locationVo,
@@ -80,10 +70,10 @@ export class CompleteOnboardingUseCase {
       }
     );
 
-    // Domain operation: Mark onboarding as complete
+     // Step 5: Domain operation: Mark onboarding as complete
     client.completeOnboarding();
 
-    // Persist the aggregate to the data store
+    // Step 6: Persist the aggregate to the data store
     const savedClient = await this.clientRepository.save(client);
 
     // Return result object for presentation layer consumption

@@ -5,8 +5,8 @@
  */
 export interface CompleteOnboardingDto {
   userId: string; // Better-Auth user ID - links client profile to authentication
-  email: string;
   name: string;
+  emailVerified: boolean;
   phoneNumber?: string;
   country: string;
   state: string;

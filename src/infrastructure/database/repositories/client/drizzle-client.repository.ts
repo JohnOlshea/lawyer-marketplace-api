@@ -18,16 +18,6 @@ import type { IClientRepository } from '@/domain/client/repositories/client.repo
  * - Uses ClientMapper to convert between DB rows and domain entities
  * - Database-agnostic from domain's perspective
  * 
- * @example
- * ```typescript
- * const repository = new DrizzleClientRepository();
- * const client = await repository.findById('client-uuid');
- * if (client) {
- *   client.completeOnboarding();
- *   await repository.save(client);
- * }
- * ```
- * 
  * TODO: Inject database instance through constructor for better testability
  * TODO: Add caching layer for frequently accessed clients
  * TODO: Add comprehensive error handling with custom exceptions
@@ -39,15 +29,35 @@ export class DrizzleClientRepository implements IClientRepository {
    * 
    * @param id - Client UUID
    * @returns Client entity or null if not found
+   * 
+   * @remarks
+   * Eagerly loads related entities (user, specializations) to prevent N+1 queries.
    */
   async findById(id: string): Promise<Client | null> {
-    const result = await db
-      .select()
-      .from(clients)
-      .where(eq(clients.id, id))
-      .limit(1);
+    const result = await db.query.clients.findFirst({
+      where: eq(clients.id, id),
+      with: {
+        user: true,  // Join with user table to get name
+        specializations: {
+          with: {
+            specialization: true,
+          },
+        },
+      },
+    });
 
-    return result[0] ? ClientMapper.toDomain(result[0]) : null;
+    if (!result) return null;
+
+    // Extract specialization IDs from junction table
+    const specializationIds = result.specializations.map(
+      (cs) => cs.specializationId
+    );
+
+    return ClientMapper.toDomain({
+      ...result,
+      name: result.user.name,  // Get name from user table
+      specializationIds,
+    });
   }
 
   /**
@@ -72,11 +82,18 @@ export class DrizzleClientRepository implements IClientRepository {
       },
     });
 
-    if (!result) {
-      return null;
-    }
+    if (!result) return null;
 
-    return ClientMapper.toDomain(result);
+    // Extract specialization IDs and name from joined data
+    const specializationIds = result.specializations.map(
+      (cs) => cs.specializationId
+    );
+
+    return ClientMapper.toDomain({
+      ...result,
+      name: result.user.name,  // Get name from user table
+      specializationIds,        // Pass extracted IDs
+    });
   }
 
   /**
@@ -129,22 +146,13 @@ export class DrizzleClientRepository implements IClientRepository {
    */
   async save(client: Client): Promise<Client> {
     return await db.transaction(async (tx) => {
-      // Step 1: Insert client record
-      const [insertedClient] = await tx
-        .insert(clients)
-        .values({
-          id: client.id,
-          userId: client.userId,
-          phoneNumber: client.phoneNumber,
-          country: client.location.country,
-          state: client.location.state,
-          company: client.company,
-          createdAt: client.createdAt,
-          updatedAt: client.updatedAt,
-        })
-        .returning();
+      // Step 1: Use mapper to convert domain entity to persistence format
+      const persistenceData = ClientMapper.toPersistence(client);
 
-      // Step 2: Insert client specializations only if there are specializations
+      // Step 2: Insert client record
+      await tx.insert(clients).values(persistenceData)
+
+      // Step 3: Insert client specializations only if there are specializations
       if (client.specializationIds.length > 0) {
         await tx.insert(clientSpecializations).values(
           client.specializationIds.map((specializationId) => ({
@@ -154,8 +162,7 @@ export class DrizzleClientRepository implements IClientRepository {
         );
       }
 
-      // Step 3: Update user onboarding_completed flag if onboarding is complete
-      // Synchronizes onboarding status with user record
+      // Step 4: Update user onboarding_completed flag if onboarding is complete
       if (client.onboardingCompleted) {
         await tx
           .update(user)
