@@ -1,64 +1,75 @@
+/**
+ * Application Entry Point
+ * 
+ * Bootstraps the Lawyer Marketplace API with middleware, routes, and error handling.
+ * Middleware order: logger → CORS → request logger → routes → error handlers
+ */
+
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
-import { auth } from './lib/auth';
+import { logger as honoLogger } from 'hono/logger';
+
+import { appConfig } from './config/app.config';
+import { logger } from './infrastructure/logging/logger';
 import { createV1Routes } from './presentation/http/routes/v1';
+import { requestLogger } from './presentation/http/middleware/request-logger.middleware';
+import { errorHandler } from './presentation/http/middleware/error-handler.middleware';
 
 /**
  * Main application instance
  */
 const app = new Hono();
 
+// ============================================================================
+// Global Middleware
+// ============================================================================
+
 /**
- * Global middleware stack
- * Order matters: logger -> cors -> routes
+ * Hono's built-in logger
+ * 
+ * @remarks
+ * Provides basic request logging to console.
  */
-app.use('*', logger());
+app.use('*', honoLogger());
+
+/**
+ * CORS (Cross-Origin Resource Sharing) middleware
+ * 
+ * @remarks
+ * - Allows requests from configured origins
+ * - Enables credentials (cookies, authorization headers)
+ * - Required for frontend applications on different domains
+ * - Origins configured via CORS_ORIGINS environment variable
+ */
 app.use(
   '*',
   cors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+    origin: appConfig.corsOrigins,
     credentials: true,
   })
 );
 
 /**
- * API versioning strategy
- * Allows gradual migration and backwards compatibility
+ * Custom request logger middleware
+ * 
+ * @remarks
+ * - Logs structured request/response data
+ * - Adds correlation ID to response headers
+ * - Calculates request duration
+ * 
+ * Applied to all routes ('*') for comprehensive logging.
  */
-app.route('/api/v1', createV1Routes());
+app.use('*', requestLogger);
+
+// ============================================================================
+// Routes
+// ============================================================================
 
 /**
- * Authentication routes
- * Delegated to Better Auth for OAuth, session management, etc.
+ * Health check for load balancers, monitoring tools and container orchestration
+ * TODO: Add database connection check
  */
-app.on(['POST', 'GET'], '/api/auth/**', (c) => {
-  return auth.handler(c.req.raw);
-});
-
-/**
- * Example protected route
- */
-app.get('/api/protected', async (c) => {
-  const session = await auth.api.getSession({
-    headers: c.req.raw.headers,
-  });
-
-  if (!session) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-
-  return c.json({
-    message: 'This is protected',
-    user: session.user,
-  });
-});
-
-/**
- * Health check endpoint
- * Used by load balancers, monitoring tools, and container orchestration
- */
-app.get('/', (c) => {
+app.get('/health', (c) => {
   return c.json({
     status: 'healthy',
     message: 'Lawyer Marketplace API',
@@ -68,20 +79,77 @@ app.get('/', (c) => {
 });
 
 /**
+ * API versioning: /api/v1/...
+ * Enables backwards compatibility and gradual migrations
+ */
+app.route(`${appConfig.apiPrefix}/${appConfig.apiVersion}`, createV1Routes());
+
+// ============================================================================
+// Error Handlers
+// ============================================================================
+
+// Error handling
+app.onError((err, c) => {
+  return errorHandler(err, c);
+});
+
+// 404 handler
+app.notFound((c) => {
+  return c.json(
+    {
+      success: false,
+      message: 'Route not found',
+      statusCode: 404,
+      timestamp: new Date().toISOString(),
+    },
+    404
+  );
+});
+
+// ============================================================================
+// Graceful Shutdown
+// ============================================================================
+
+/**
  * Graceful shutdown handler
  * Ensures in-flight requests complete before process termination
+ * Database cleanup handled in db.ts
+ * TODO: Create shutdown manager to coordinate all cleanup (cache, queue, etc.)
  */
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   process.exit(0);
 });
 
-const PORT = Number(process.env.PORT) || 3000;
+// ============================================================================
+// Server Start
+// ============================================================================
 
+const port = appConfig.port;
+
+logger.info(`Server starting on port ${port}`);
+logger.info(`Environment: ${appConfig.nodeEnv}`);
+
+/**
+ * Bun server export
+ * 
+ * @remarks
+ * Bun expects a default export with `port` and `fetch` properties.
+ */
 export default {
-  port: PORT,
+  port,
   fetch: app.fetch,
 };
 
-console.log(`Server running on http://localhost:${PORT}`);
-console.log(`API Documentation: http://localhost:${PORT}/api/v1`);
+// ============================================================================
+// Development Console Logs
+// ============================================================================
+
+/**
+ * Development-friendly console logs
+ * 
+ * TODO: Remove these in production or gate behind NODE_ENV check
+ * TODO: Replace with proper startup banner
+ */
+console.log(`Server running on http://localhost:${port}`);
+console.log(`API Documentation: http://localhost:${port}/api/v1`);
