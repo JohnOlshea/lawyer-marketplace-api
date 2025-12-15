@@ -164,10 +164,10 @@ export class Client extends AggregateRoot {
     return phoneRegex.test(phone);
   }
 
-// ===================================
+  // ===================================
   // Getters (Public API for Reading State)
   // ===================================
-  
+
   /** Gets the associated user ID from auth system */
   get userId(): string {
     return this._userId;
@@ -212,7 +212,7 @@ export class Client extends AggregateRoot {
     return this._onboardingCompleted;
   }
 
-// ===================================
+  // ===================================
   // Business Methods (Commands)
   // ===================================
 
@@ -260,6 +260,133 @@ export class Client extends AggregateRoot {
     // TODO: Emit domain event for side effects (email, analytics, etc.)
     // this.addDomainEvent(
     //   new ClientOnboardingCompletedEvent(this.id, this._userId)
+    // );
+  }
+
+  /**
+   * Adds a specialization to the client's profile
+   * 
+   * @param specializationId - ID of the specialization to add
+   * @throws {ValidationException} If business rules prevent addition
+   * 
+   * @remarks
+   * **Business Rules:**
+   * - Cannot exceed 3 specializations (maximum limit)
+   * - Cannot add duplicate specializations
+   * 
+   * **Side Effects:**
+   * - Adds specialization to the list
+   * - Updates entity timestamp
+   * - Emits SpecializationAddedEvent (TODO)
+   */
+  public addSpecialization(specializationId: string): void {
+    // Business rule: maximum 3 specializations
+    if (this._specializationIds.length >= 3) {
+      throw new ValidationException('Maximum 3 specializations allowed');
+    }
+
+    // Business rule: no duplicate specializations
+    if (this._specializationIds.includes(specializationId)) {
+      throw new ValidationException('Specialization already exists');
+    }
+
+    this._specializationIds.push(specializationId);
+    this.touch();
+
+    // TODO: Emit domain event
+    // this.addDomainEvent(
+    //   new SpecializationAddedEvent(this.id, specializationId)
+    // );
+  }
+
+  /**
+   * Removes a specialization from the client's profile
+   * 
+   * @param specializationId - ID of the specialization to remove
+   * @throws {ValidationException} If business rules prevent removal
+   * 
+   * @remarks
+   * **Business Rules:**
+   * - Must keep at least 1 specialization
+   * - Specialization must exist in the list
+   * 
+   * **Side Effects:**
+   * - Removes specialization from the list
+   * - Updates entity timestamp
+   * - Emits SpecializationRemovedEvent (TODO)
+   */
+  public removeSpecialization(specializationId: string): void {
+    // Business rule: must keep at least one specialization
+    if (this._specializationIds.length <= 1) {
+      throw new ValidationException('At least one specialization is required');
+    }
+
+    const index = this._specializationIds.indexOf(specializationId);
+
+    // Business rule: specialization must exist
+    if (index === -1) {
+      throw new ValidationException('Specialization not found');
+    }
+
+    this._specializationIds.splice(index, 1);
+    this.touch();
+
+    // TODO: Emit domain event
+    // this.addDomainEvent(
+    //   new SpecializationRemovedEvent(this.id, specializationId)
+    // );
+  }
+
+  /**
+   * Updates the client's profile information
+   * 
+   * @param updates - Partial profile updates
+   * @throws {ValidationException} If validation fails
+   * 
+   * @remarks
+   * **Allowed Updates:**
+   * - Name (must be at least 2 characters)
+   * - Phone number
+   * - Company
+   * 
+   * **Not Allowed:**
+   * - User ID (immutable - tied to auth system)
+   * - Location (use separate method if needed)
+   * - Specializations (use add/remove methods)
+   * 
+   * **Side Effects:**
+   * - Updates specified fields
+   * - Updates entity timestamp
+   * - Emits ProfileUpdatedEvent (TODO)
+   */
+  public updateProfile(updates: {
+    name?: string;
+    phoneNumber?: string;
+    company?: string;
+  }): void {
+    // Validate name if provided
+    if (updates.name !== undefined) {
+      if (updates.name.trim().length < 2) {
+        throw new ValidationException('Name must be at least 2 characters');
+      }
+      this._name = updates.name;
+    }
+
+    // Update phone number if provided
+    if (updates.phoneNumber !== undefined) {
+      this._phoneNumber = updates.phoneNumber;
+    }
+
+    // Update company if provided
+    if (updates.company !== undefined) {
+      this._company = updates.company;
+    }
+
+    this.touch();
+
+    // TODO: Emit domain event
+    // this.addDomainEvent(
+    //   new ProfileUpdatedEvent(this.id, updates)
     // );
   }
 }

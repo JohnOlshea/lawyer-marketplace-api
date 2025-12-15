@@ -66,7 +66,7 @@ export class CompleteOnboardingUseCase {
         location: locationVo,
         company,
         specializationIds,
-        onboardingCompleted: false,
+        onboardingCompleted: false, // TODO: Take this out. No point since it's set internally
       }
     );
 
