@@ -1,0 +1,31 @@
+/**
+ * Standardized error codes for API responses.
+ * Used for consistent error handling across all endpoints.
+ */
+export const ErrorCodes = {
+  // Validation
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  INVALID_INPUT: 'INVALID_INPUT',
+
+  // Authentication
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  
+  // Authorization
+  FORBIDDEN: 'FORBIDDEN',
+  INSUFFICIENT_PERMISSIONS: 'INSUFFICIENT_PERMISSIONS',
+
+  // Resources
+  NOT_FOUND: 'NOT_FOUND',
+  ALREADY_EXISTS: 'ALREADY_EXISTS',
+  CONFLICT: 'CONFLICT',
+
+  // Business Logic
+  DOMAIN_ERROR: 'DOMAIN_ERROR',
+  BUSINESS_RULE_VIOLATION: 'BUSINESS_RULE_VIOLATION',
+
+  // Server
+  INTERNAL_SERVER_ERROR: 'INTERNAL_SERVER_ERROR',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+} as const;
