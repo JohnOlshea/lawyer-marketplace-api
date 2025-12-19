@@ -1,4 +1,3 @@
-import { Email } from '@/domain/client/value-objects/email.vo';
 import { Client } from '@/domain/client/entities/client.entity';
 import { Location } from '@/domain/client/value-objects/location.vo';
 
@@ -33,7 +32,6 @@ export class ClientMapper {
       raw.id,
       {
         userId: raw.userId,
-        name: raw.name || '', // From user table, or constructed
         phoneNumber: raw.phoneNumber ?? undefined,
         location,
         company: raw.company ?? undefined,

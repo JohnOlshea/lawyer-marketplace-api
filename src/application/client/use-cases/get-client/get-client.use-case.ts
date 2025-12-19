@@ -1,23 +1,13 @@
+import type { GetClientDto } from './get-client.dto';
 import type { Client } from '@/domain/client/entities/client.entity';
-import type { IClientRepository } from '@/domain/client/repositories/client.repository.interface';
 import type { IUseCase } from '@/application/shared/interfaces/use-case.interface';
-
-/**
- * Get Client Use Case Input
- */
-export interface GetClientInput {
-  id: string;
-}
+import type { IClientRepository } from '@/domain/client/repositories/client.repository.interface';
+import { ClientNotFoundError } from '@/domain/client/errors/client-not-found.error';
 
 /**
  * Get Client Use Case
  * 
  * Retrieves a single client by their ID.
- * 
- * @remarks
- * - Follows Single Responsibility Principle
- * - Throws descriptive error when client not found
- * - TODO: Replace generic Error with ClientNotFoundException for better error handling
  * 
  * @example
  * ```typescript
@@ -25,26 +15,26 @@ export interface GetClientInput {
  * const client = await useCase.execute({ id: 'client-uuid' });
  * ```
  */
-export class GetClientUseCase implements IUseCase<GetClientInput, Client> {
+export class GetClientUseCase implements IUseCase<GetClientDto, Client> {
   constructor(private readonly clientRepository: IClientRepository) {}
 
   /**
    * Executes the use case
    * 
-   * @param input - Contains client ID to retrieve
+   * @param dto - Contains client ID to retrieve
    * @returns Client entity
    * @throws {Error} If client doesn't exist or operation fails
    * TODO: Create ClientNotFoundException for better error handling in controllers
    */
-  async execute(input: GetClientInput): Promise<Client> {
-    this.validateInput(input);
+  async execute(dto: GetClientDto): Promise<Client> {
+    // this.validateInput(dto);
 
+    // TODO: Is try catch needed?
     try {
-      const client = await this.clientRepository.findById(input.id);
+      const client = await this.clientRepository.findByUserId(dto.userId);
 
       if (!client) {
-        // TODO: Replace with ClientNotFoundException
-        throw new Error(`Client with ID '${input.id}' not found`);
+        throw new ClientNotFoundError(`Client not found for user: ${dto.userId}`);
       }
 
       return client;
@@ -55,18 +45,20 @@ export class GetClientUseCase implements IUseCase<GetClientInput, Client> {
     }
   }
 
+  // TODO: is this the best location for this?
+
   /**
    * Validates use case input
    * @throws {Error} If validation fails
    */
-  private validateInput(input: GetClientInput): void {
-    if (!input.id || input.id.trim().length === 0) {
+  private validateInput(input: GetClientDto): void {
+    if (!input.userId || input.userId.trim().length === 0) {
       throw new Error('Client ID is required');
     }
 
     // Optional: UUID validation
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(input.id)) {
+    if (!uuidRegex.test(input.userId)) {
       throw new Error('Invalid client ID format. Expected UUID.');
     }
   }

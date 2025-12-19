@@ -9,7 +9,6 @@ import type { Location } from '../value-objects/location.vo';
  */
 export interface ClientProps {
   userId: string; // Reference to authenticated user in Better Auth
-  name: string;
   phoneNumber?: string;
   location: Location;
   company?: string;
@@ -31,13 +30,11 @@ export interface ClientProps {
  * **Key Business Rules:**
  * - Client must have 1-3 legal specializations
  * - Onboarding must be completed before posting requests
- * - Name must be at least 2 characters
  * 
  */
 export class Client extends AggregateRoot {
   // Private state - only accessible through methods and getters
   private _userId: string;
-  private _name: string;
   private _phoneNumber?: string;
   private _location: Location;
   private _company?: string;
@@ -61,7 +58,6 @@ export class Client extends AggregateRoot {
   ) {
     super(id, createdAt, updatedAt);
     this._userId = props.userId;
-    this._name = props.name;
     this._phoneNumber = props.phoneNumber;
     this._location = props.location;
     this._company = props.company;
@@ -136,10 +132,6 @@ export class Client extends AggregateRoot {
       throw new ValidationException('User ID is required');
     }
 
-    if (!props.name || props.name.trim().length < 2) {
-      throw new ValidationException('Name must be at least 2 characters');
-    }
-
     if (props.specializationIds.length === 0) {
       throw new ValidationException('At least one specialization is required');
     }
@@ -171,11 +163,6 @@ export class Client extends AggregateRoot {
   /** Gets the associated user ID from auth system */
   get userId(): string {
     return this._userId;
-  }
-
-  /** Gets the client's name */
-  get name(): string {
-    return this._name;
   }
 
   /** Gets the phone number (if provided) */
@@ -345,7 +332,6 @@ export class Client extends AggregateRoot {
    * 
    * @remarks
    * **Allowed Updates:**
-   * - Name (must be at least 2 characters)
    * - Phone number
    * - Company
    * 
@@ -360,21 +346,18 @@ export class Client extends AggregateRoot {
    * - Emits ProfileUpdatedEvent (TODO)
    */
   public updateProfile(updates: {
-    name?: string;
     phoneNumber?: string;
+    location?: Location;
     company?: string;
   }): void {
-    // Validate name if provided
-    if (updates.name !== undefined) {
-      if (updates.name.trim().length < 2) {
-        throw new ValidationException('Name must be at least 2 characters');
-      }
-      this._name = updates.name;
-    }
-
     // Update phone number if provided
     if (updates.phoneNumber !== undefined) {
       this._phoneNumber = updates.phoneNumber;
+    }
+
+    // Update location if provided
+    if (updates.location !== undefined) {
+      this._location = updates.location;
     }
 
     // Update company if provided

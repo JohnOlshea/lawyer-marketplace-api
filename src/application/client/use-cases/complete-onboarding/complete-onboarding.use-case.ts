@@ -61,7 +61,6 @@ export class CompleteOnboardingUseCase {
       IdGenerator.generate(),
       {
         userId,
-        name,
         phoneNumber,
         location: locationVo,
         company,

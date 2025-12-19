@@ -177,4 +177,59 @@ export class DrizzleClientRepository implements IClientRepository {
       return client;
     });
   }
+
+  /**
+   * Updates client aggregate and related data in a single transaction.
+   * 
+   * Transaction boundaries:
+   * 1. Update client record (location flattened from VO)
+   * 2. Replace specializations (delete + insert pattern)
+   * 3. Sync onboarding status to user table if completed
+   * 
+   * @remarks
+   * Specializations use full replace strategy instead of merge/diff for simplicity.
+   * Consider optimization if specialization lists grow large.
+   */
+  async update(client: Client): Promise<Client> {
+    return await db.transaction(async (tx) => {
+      // Update client record
+      await tx
+        .update(clients)
+        .set({
+          phoneNumber: client.phoneNumber,
+          country: client.location.country,
+          state: client.location.state,
+          company: client.company,
+          updatedAt: client.updatedAt,
+        })
+        .where(eq(clients.id, client.id));
+
+      // Update specializations (delete all and re-insert)
+      await tx
+        .delete(clientSpecializations)
+        .where(eq(clientSpecializations.clientId, client.id));
+
+      if (client.specializationIds.length > 0) {
+        await tx.insert(clientSpecializations).values(
+          client.specializationIds.map((specializationId) => ({
+            clientId: client.id,
+            specializationId,
+          }))
+        );
+      }
+
+      // Update user onboarding_completed flag if needed
+      if (client.onboardingCompleted) {
+        await tx
+          .update(user)
+          .set({ 
+            onboardingCompleted: true, 
+            updatedAt: new Date() 
+          })
+          .where(eq(user.id, client.userId));
+      }
+
+      return client;
+    });
+  }
 }
