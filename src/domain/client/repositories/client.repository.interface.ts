@@ -20,4 +20,13 @@ export interface IClientRepository extends IRepository<Client> {
    * @returns Client aggregate or null if not found
    */
   findByUserId(userId: string): Promise<Client | null>;
+
+  /**
+   * Persists client aggregate updates.
+   * Handles specializations and related data in transaction.
+   * 
+   * @param client - Updated client aggregate
+   * @returns Persisted client entity
+   */
+  update(client: Client): Promise<Client>;
 }
